@@ -203,24 +203,30 @@
           KUBECONFIG: "{{ kubeconfig }}"
       when: kubeconfig_ready.stat.exists
 
+    - name: Get SSH user home directory (so .kube is in the right place under become)
+      ansible.builtin.command: "getent passwd {{ ansible_user }} | cut -d: -f6"
+      register: ssh_user_home_result
+      changed_when: false
+      when: kubeconfig_ready.stat.exists
+
     - name: Ensure .kube directory exists for SSH user
       ansible.builtin.file:
-        path: "{{ ansible_user_dir }}/.kube"
+        path: "{{ ssh_user_home_result.stdout }}/.kube"
         state: directory
         mode: "0755"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
-      when: kubeconfig_ready.stat.exists
+      when: kubeconfig_ready.stat.exists and ssh_user_home_result.stdout | length > 0
 
     - name: Copy admin kubeconfig to user .kube/config
       ansible.builtin.copy:
         src: "{{ kubeconfig }}"
-        dest: "{{ ansible_user_dir }}/.kube/config"
+        dest: "{{ ssh_user_home_result.stdout }}/.kube/config"
         remote_src: true
         mode: "0600"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
-      when: kubeconfig_ready.stat.exists
+      when: kubeconfig_ready.stat.exists and ssh_user_home_result.stdout | length > 0
 
     - name: Untaint control plane node (allow workloads)
       ansible.builtin.command: "kubectl taint nodes --all node-role.kubernetes.io/control-plane-"
